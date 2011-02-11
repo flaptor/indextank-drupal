@@ -1,0 +1,11 @@
+IndexTank module for Drupal
+http://www.indextank.com
+
+Installation instructions:
+1.- Sign up at IndexTank.
+2.- Download and unzip/untar the last stable version of the IndexTank module for Drupal.
+3.- Upload the IndexTank module to <your_drupal_directory>/sites/all/modules your web server.
+4.- Enable the IndexTank module at Administer >> Site Building >> Modules.
+5.- Configure your IndexTank api url at Administer >> Site Configuration >> IndexTank Settings.
+6.- Create your index pushing the 'Index all your documents' button.
+

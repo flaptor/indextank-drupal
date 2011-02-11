@@ -1,0 +1,7 @@
+<?php
+// $Id$: indextank.install
+
+function indextank_uninstall() {
+  indextank_do_uninstall();
+}
+

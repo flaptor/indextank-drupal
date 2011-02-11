@@ -1,0 +1,109 @@
+<?php
+// $Id$: indextank.module
+
+require_once('/var/www/drupal-6.20/sites/all/modules/indextank/indextank_client.php');
+
+function indextank_help($path, $arg) {
+  $output = '';
+  switch ($path) {
+    case "admin/help#indextank":
+      $output = '<p><a href="http://www.indextank.com">IndexTank</a>'.  t("search engine in your website") .'</p>';
+      break;
+  }
+  return $output;
+} // function indextank_help
+
+
+function indextank_admin() {
+  $form = array();
+
+  $form['#submit'] = array('indextank_admin_submit');
+
+  $form['indextank_apiurl'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Api Url'),
+    '#default_value' => variable_get('indextank_apiurl', ''),
+    '#size' => 60,
+    '#maxlength' => 60,
+    '#description' => t("Your IndexTank url api"),
+    '#required' => TRUE,
+  );
+
+  $form['indextank_setup'] = array(
+    '#type' => 'submit',
+    '#value' => t('Index all your documents'),
+    '#weight' => 1,
+  );
+
+  return system_settings_form($form);
+}
+
+function indextank_admin_validate($form, &$form_state) {
+  $api_url = $form_state['values']['indextank_apiurl'];
+  if (!indextank_valid_apiurl($api_url)) {
+    form_set_error('indextank_apiurl', t('You must enter a valid IndexTank api url.'));
+  }
+}
+
+function indextank_admin_submit($form, &$form_state) {
+
+  $clicked_button = $form_state['clicked_button']['#id'];
+
+  if ($clicked_button == 'edit-indextank-setup') {
+    // Create new index
+    $api_url = $form_state['values']['indextank_apiurl'];
+    $index_name = 'drupal';
+
+    $api = new ApiClient($api_url);
+    $index = $api->get_index($index_name);
+
+    if ($index->exists()) {
+      $index->delete_index();
+    }
+
+    $index->create_index();
+
+    while (! $index->has_started()) {
+      sleep(1);
+    }
+    // Index created
+  }
+}
+
+function indextank_menu() {
+
+  $items = array();
+
+  $items['admin/settings/indextank'] = array(
+    'title' => 'IndexTank settings',
+    'description' => 'Config IndexTank search engine and index all your documents',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('indextank_admin'),
+    'access arguments' => array('access administration pages'),
+    'type' => MENU_NORMAL_ITEM,
+   );
+
+  return $items;
+}
+
+function indextank_valid_apiurl($api_url) {
+  return (bool) preg_match("
+      /^http:\/\/:[[:alnum:][:punct:]]+@[a-z0-9]{4,8}\.api\.indextank\.com$/",
+      $api_url);
+}
+
+
+function indextank_do_uninstall() {
+  // Destroy drupal index
+  $api_url = variable_get('indextank_apiurl', '');
+  $index_name = 'drupal';
+
+  $api = new ApiClient($api_url);
+  $index = $api->get_index($index_name);
+
+  if ($index->exists()) {
+    $index->delete_index();
+  }
+  // Index destroyed
+}
+
