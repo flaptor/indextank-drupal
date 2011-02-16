@@ -4,4 +4,5 @@ name = "IndexTank module"
 description = Includes <a href="http://www.indextank.com">IndexTank</a> search engine into your website
 version = 0.1
 core = 6.x
+dependencies[] = search
 

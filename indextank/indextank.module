@@ -1,7 +1,9 @@
 <?php
 // $Id$: indextank.module
 
-require_once('/var/www/drupal-6.20/sites/all/modules/indextank/indextank_client.php');
+require_once(dirname(__FILE__) . '/indextank_client.php');
+
+// Installation and configuration hooks
 
 function indextank_help($path, $arg) {
   $output = '';
@@ -66,7 +68,18 @@ function indextank_admin_submit($form, &$form_state) {
     while (! $index->has_started()) {
       sleep(1);
     }
+
     // Index created
+    $query = db_query(
+      "SELECT n.nid, n.type, n.title, n.created as timestamp, nr.body
+      FROM {node} n
+      INNER JOIN {node_revisions} nr ON n.nid = nr.nid
+      WHERE n.status = 1;"
+    );
+
+    while ($row = db_fetch_object($query)) {
+      indextank_index_document($index, $row);
+    }
   }
 }
 
@@ -105,5 +118,121 @@ function indextank_do_uninstall() {
     $index->delete_index();
   }
   // Index destroyed
+}
+
+
+// Search and index hooks
+
+function indextank_nodeapi(&$node, $op, $a3 = NULL, $a4 = NULL) {
+  if ($op == 'insert' || $op == 'update') {
+    $api_url = variable_get('indextank_apiurl', '');
+    $index_name = 'drupal';
+
+    $api = new ApiClient($api_url);
+    $index = $api->get_index($index_name);
+
+    indextank_index_document($index, $node);
+  }
+}
+
+function indextank_search($op = 'search', $keys = null) {
+  switch ($op) {
+    case 'name':
+      return t('IndexTank');
+    case 'search':
+      $api_url = variable_get('indextank_apiurl', '');
+      $index_name = 'drupal';
+
+      $api = new ApiClient($api_url);
+      $index = $api->get_index($index_name);
+
+      $indextank_search_result = $index->search($keys);
+
+      $doc_ids = array();
+      foreach ($indextank_search_result->results as $doc_result) {
+        $doc_ids[] = $doc_result->docid;
+      }
+      $nodes = array();
+
+      if (count($doc_ids) > 0) {
+        $placeholders = db_placeholders($doc_ids);
+
+        $query = db_query("SELECT n.*, u.name FROM {node} n inner join users u on n.uid = u.uid WHERE n.nid IN ($placeholders)", $doc_ids);
+        while ($row = db_fetch_object($query)) {
+          $node = array(
+            'link' => url("node/{$row->nid}"),
+            'type' => $row->type,
+            'title' => $row->title,
+            'user' => $row->name,
+            'date' => $row->changed,
+          );
+          $nodes[] = $node;
+        }
+      }
+      return $nodes;
+  }
+}
+
+function indextank_index_document($index, $document) {
+  $data = array(
+    'text' => $document->title . ' ' . $document->body,
+    'title' => $document->title,
+    'content' => $document->body,
+    'timestamp' => $document->timestamp,
+    'match_all_field'=> 'all_items',
+  );
+
+  $docid = $document->nid;
+  $index->add_document($docid, $data);
+}
+
+/**
+ *********************
+ * Alter drupal forms
+ *********************
+ */
+
+/**
+ * Implementation of hook_form_[form_id]_alter().
+ */
+function indextank_form_alter(&$form, $form_state, $form_id) {
+  if ($form_id == 'search_theme_form' || $form_id == 'search_block_form') {
+    if (!isset($form['#submit'])) {
+      $form['#submit'] = array('indextank_search_box_form_submit');
+    }
+    else {
+      $key = array_search('search_box_form_submit', $form['#submit']);
+      if ($key !== FALSE) {
+        // Replace the search module's function.
+        $form['#submit'][$key] = 'indextank_search_box_form_submit';
+      }
+    }
+  }
+}
+
+/**
+ * Process a block search form submission.
+ *
+ * @see search_box_form_submit()
+ */
+function indextank_search_box_form_submit($form, &$form_state) {
+  // The search form relies on control of the redirect destination for its
+  // functionality, so we override any static destination set in the request,
+  // for example by drupal_access_denied() or drupal_not_found()
+  // (see http://drupal.org/node/292565).
+  if (isset($_REQUEST['destination'])) {
+    unset($_REQUEST['destination']);
+  }
+  if (isset($_REQUEST['edit']['destination'])) {
+    unset($_REQUEST['edit']['destination']);
+  }
+
+  $form_id = $form['form_id']['#value'];
+  $keys = $form_state['values'][$form_id];
+  // Handle Apache webserver clean URL quirks.
+  if (variable_get('clean_url', '0')) {
+    $keys = str_replace('+', '%2B', $keys);
+  }
+  $form_state['redirect'] = 'search/indextank/'. trim($keys);
 }
 
