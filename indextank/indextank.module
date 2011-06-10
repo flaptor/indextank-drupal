@@ -2,6 +2,9 @@
 // $Id$: indextank.module
 
 require_once(dirname(__FILE__) . '/indextank_client.php');
+require_once(dirname(__FILE__) . '/indextank.theme.inc');
+
+drupal_add_css(drupal_get_path('module', 'indextank') . '/indextank.css');
 
 // Installation and configuration hooks
 
@@ -15,6 +18,31 @@ function indextank_help($path, $arg) {
   return $output;
 } // function indextank_help
 
+function indextank_init() {
+
+  $external_css = array('http://ajax.googleapis.com/ajax/libs/jqueryui/1.8.11/themes/south-street/jquery-ui.css');
+
+  foreach ($external_css as $css) {
+    drupal_add_js('document.write(unescape("%3Clink type=\'text/css\' rel=\'stylesheet\' href=\'' . 
+      $css . 
+      '\' media=\'all\' /%3E"));', 'inline');
+  }
+
+  $external_js = array(
+    'https://ajax.googleapis.com/ajax/libs/jquery/1.5.2/jquery.min.js',
+    'https://ajax.googleapis.com/ajax/libs/jqueryui/1.8.11/jquery-ui.min.js',
+    'https://github.com/flaptor/indextank-jquery/raw/1.x/jquery.indextank.ize.js',
+    'https://github.com/flaptor/indextank-jquery/raw/1.x/jquery.indextank.basic.js',
+    'https://github.com/flaptor/indextank-jquery/raw/1.x/jquery.indextank.instantlinks.js'
+  );
+
+  foreach ($external_js as $js) {
+    drupal_add_js('document.write(unescape("%3Cscript src=\'' . 
+      $js . 
+      '\' type=\'text/javascript\'%3E%3C/script%3E"));', 'inline');
+  }
+
+}
 
 function indextank_admin() {
   $form = array();
@@ -28,6 +56,16 @@ function indextank_admin() {
     '#size' => 60,
     '#maxlength' => 60,
     '#description' => t("Your IndexTank url api"),
+    '#required' => TRUE,
+  );
+
+  $form['indextank_public_apiurl'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Public Api Url'),
+    '#default_value' => variable_get('indextank_public_apiurl', ''),
+    '#size' => 60,
+    '#maxlength' => 60,
+    '#description' => t("Your IndexTank public url api"),
     '#required' => TRUE,
   );
 
@@ -77,8 +115,20 @@ function indextank_admin_submit($form, &$form_state) {
       WHERE n.status = 1;"
     );
 
+    $docs = array();
     while ($row = db_fetch_object($query)) {
-      indextank_index_document($index, $row);
+      $fields = indextank_get_fields($row);
+      $doc = array('docid' => $row->nid, 'fields' => $fields);
+      $docs[] = $doc;
+
+      if (count($docs) % 100 == 0) {
+        $index->add_documents($docs);
+        $docs = array();
+      }
+    }
+    
+    if (count($docs) > 0) {
+        $index->add_documents($docs);
     }
   }
 }
@@ -105,7 +155,6 @@ function indextank_valid_apiurl($api_url) {
       $api_url);
 }
 
-
 function indextank_do_uninstall() {
   // Destroy drupal index
   $api_url = variable_get('indextank_apiurl', '');
@@ -120,9 +169,7 @@ function indextank_do_uninstall() {
   // Index destroyed
 }
 
-
 // Search and index hooks
-
 function indextank_nodeapi(&$node, $op, $a3 = NULL, $a4 = NULL) {
   if ($op == 'insert' || $op == 'update') {
     $api_url = variable_get('indextank_apiurl', '');
@@ -146,7 +193,23 @@ function indextank_search($op = 'search', $keys = null) {
       $api = new ApiClient($api_url);
       $index = $api->get_index($index_name);
 
-      $indextank_search_result = $index->search($keys);
+
+      $query_parts = array();
+
+      // full post, once
+      // snippets won't work without the line below.
+      $query_parts[]= sprintf("(%s)", $keys);
+
+      // post_content, once
+      $query_parts[]= sprintf("content:(%s)", $keys);
+
+      // post title relevance * 5
+      $query_parts[]= sprintf("title:(%s)^5", $keys);
+      
+      // put everything together
+      $query =  implode($query_parts, " OR ");
+
+      $indextank_search_result = $index->search($query);
 
       $doc_ids = array();
       foreach ($indextank_search_result->results as $doc_result) {
@@ -174,16 +237,20 @@ function indextank_search($op = 'search', $keys = null) {
 }
 
 function indextank_index_document($index, $document) {
-  $data = array(
-    'text' => $document->title . ' ' . $document->body,
+  $data = indextank_get_fields($document);
+  $docid = $document->nid;
+  $index->add_document($docid, $data);
+}
+
+function indextank_get_fields($document) { 
+  $fields = array(
+    'url' => url("node/{$document->nid}"),
     'title' => $document->title,
     'content' => $document->body,
     'timestamp' => $document->timestamp,
-    'match_all_field'=> 'all_items',
   );
 
-  $docid = $document->nid;
-  $index->add_document($docid, $data);
+  return $fields;
 }
 
 /**
