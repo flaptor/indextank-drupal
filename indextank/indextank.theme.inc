@@ -47,5 +47,3 @@ function indextank_preprocess_search_theme_form(&$vars, $hook) {
   $vars['search_form'] = implode($vars['search']);
 }
 
-?>
-
