@@ -2,13 +2,17 @@
 // $Id$: indextank.module
 
 require_once(dirname(__FILE__) . '/indextank_client.php');
-require_once(dirname(__FILE__) . '/indextank.theme.inc');
+include_once(dirname(__FILE__) . '/indextank.theme.inc');
 
 // Load css and js
 function indextank_init() {
 
   drupal_add_css(drupal_get_path('module', 'indextank') . '/indextank.css');
-  drupal_add_css('http://ajax.googleapis.com/ajax/libs/jqueryui/1.8.11/themes/south-street/jquery-ui.css', 'external');
+  //drupal_add_css('http://ajax.googleapis.com/ajax/libs/jqueryui/1.8.11/themes/south-street/jquery-ui.css', 'external');
+  drupal_add_js('document.write(unescape("%3Clink type=\'text/css\' rel=\'stylesheet\' href=\'' . 
+    'http://ajax.googleapis.com/ajax/libs/jqueryui/1.8.11/themes/south-street/jquery-ui.css' .
+    '\' media=\'all\'%3E "));', 'inline'
+  );
 
   drupal_add_js(drupal_get_path('module', 'indextank') . '/dateFormat.js');
   $external_js = array(
@@ -21,9 +25,10 @@ function indextank_init() {
   );
 
   foreach ($external_js as $js) {
-    drupal_add_js($js, 'external');
+    drupal_add_js('document.write(unescape("%3Cscript src=\'' . $js .
+                   '\' type=\'text/javascript\'%3E%3C/script%3E"));', 'inline');
   }
-
+  drupal_add_js(indextank_search_js(), 'inline');
 }
 
 function indextank_do_uninstall() {
@@ -128,13 +133,26 @@ function indextank_admin_submit($form, &$form_state) {
     }
 
     // Index created
-    $results = db_query(
+    if (is_drupal_version_6()) {
+      $rows = db_query(
+      "SELECT n.nid, n.type, n.title, n.created as timestamp, r.body as body, u.name name
+         FROM {node} n, {node_revisions} r, {users} u
+        WHERE n.nid = r.nid
+          AND n.uid = u.uid
+          AND n.status = 1;");
+      $results = array();
+      while ($row = db_fetch_object($rows)) {
+        $results[] = $row;
+      } 
+    } else {
+      $results = db_query(
       "SELECT n.nid, n.type, n.title, n.created as timestamp, fd.body_value as body, u.name name
          FROM node n, field_data_body fd, users u
         WHERE n.nid = fd.entity_id
           AND n.uid = u.uid
           AND n.status = 1;", array()
-    );
+      );
+    }
 
     $docs = array();
     foreach ($results as $row) {
@@ -156,37 +174,44 @@ function indextank_admin_submit($form, &$form_state) {
 
 
 // Index and delete hooks
+// drupal 7.x
 function indextank_node_insert($node) {
-  $api_url = variable_get('indextank_apiurl', '');
-  $index_name = 'drupal';
-
-  $api = new ApiClient($api_url);
-  $index = $api->get_index($index_name);
-
+  $index = get_indextank_index();
   indextank_index_document($index, $node);
 }
 
 function indextank_node_update($node) {
-  $api_url = variable_get('indextank_apiurl', '');
-  $index_name = 'drupal';
-
-  $api = new ApiClient($api_url);
-  $index = $api->get_index($index_name);
-
+  $index = get_indextank_index();
   indextank_index_document($index, $node);
 }
 
 function indextank_node_delete($node) {
-  $api_url = variable_get('indextank_apiurl', '');
-  $index_name = 'drupal';
-
-  $api = new ApiClient($api_url);
-  $index = $api->get_index($index_name);
-
+  $index = get_indextank_index();
   indextank_delete_document($index, $node);
 }
 
+// drupal 6.x
+function indextank_nodeapi(&$node, $op, $a3 = NULL, $a4 = NULL) {
+  if ($op == 'insert' || $op == 'update') {
+    $index = get_indextank_index();
+    indextank_index_document($index, $node);
+  } elseif ($op == 'delete') {
+    $index = get_indextank_index();
+    indextank_delete_document($index, $node);
+  }
+}
+
+
 // Private functions
+function get_indextank_index() {
+    $api_url = variable_get('indextank_apiurl', '');
+    $index_name = 'drupal';
+  
+    $api = new ApiClient($api_url);
+    $index = $api->get_index($index_name);
+    return $index;
+}
+
 function indextank_admin_validate($form, &$form_state) {
   $api_url = $form_state['values']['indextank_apiurl'];
   if (!indextank_valid_apiurl($api_url)) {
@@ -226,4 +251,10 @@ function indextank_valid_apiurl($api_url) {
   return (bool) preg_match("
       /^http:\/\/:[[:alnum:][:punct:]]+@[a-z0-9]{3,8}\.api\.indextank\.com$/",
       $api_url);
+}
+
+function is_drupal_version_6() {
+  $system_info = file_get_contents(drupal_get_path('module', 'system') . '/system.info');
+  $ret = (bool) preg_match("/.*6\.x.*/", $system_info);
+  return $ret;
 }

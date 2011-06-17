@@ -35,23 +35,15 @@ function indextank_preprocess_search_theme_form(&$vars, $hook) {
   unset($vars['form']['submit']['#printed']);
   $vars['search']['submit'] = drupal_render($vars['form']['submit']);
 
-  // Rebuild the rendered version (submit button, rest remains unchanged)
-  // unset($vars['form']['script']['#printed']);
-  $vars['search']['script'] = '<script>'.
-    '$(document).ready(function(){'.
-      '$("#search-theme-form").indextank_Ize("' . variable_get('indextank_public_apiurl', '') . '", "drupal");'.
-      'var opt = {name:"title", url:"url", fields:"title,url,content"};'.
-      '$("#edit-search-theme-form-1").indextank_InstantLinks(opt);'.
-    '});'.
-  '</script>';  
   // Collect all form elements to make it easier to print the whole form.
   $vars['search_form'] = implode($vars['search']);
 }
 
-$it_api_url = variable_get('indextank_public_apiurl', '');
-$it_script = <<< EOD
+function indextank_search_js() {
+  $it_api_url = variable_get('indextank_public_apiurl', '');
+  $it_script = <<<EOD
     $(document).ready(function() { 
-       $("#search-block-form").indextank_Ize( "$it_api_url", "drupal");
+       $("#search-block-form,#search-theme-form").indextank_Ize( "$it_api_url", "drupal");
        var opt = {
          name: "title",
          fields: "title,url,content",
@@ -106,13 +98,14 @@ $it_script = <<< EOD
                     .append( $("<div/>").addClass("link-wrapper").text("some links"));
        };
 
-       var r = $("#block-system-main").indextank_Renderer({format: fmt});
+       var r = $("#block-system-main,.right-corner .left-corner .clear-block:first").indextank_Renderer({format: fmt});
        var rw = function(q) {
         return "title:(" + q + "*)^5 OR content:(" + q + "*)";
        };
-        $("#search-block-form input[type=text]:first").indextank_InstantLinks(opt).indextank_AjaxSearch({listeners: r, rewriteQuery: rw, fields: "title,content,user,timestamp,url", snippets: "content"});
+        $("#search-block-form input[type=text]:first, #search-theme-form input[type=text]:first").indextank_InstantLinks(opt).indextank_AjaxSearch({listeners: r, rewriteQuery: rw, fields: "title,content,user,timestamp,url", snippets: "content"});
     }); 
 EOD;
 
-drupal_add_js($it_script, array('type' => 'inline', 'scope' => 'footer', 'weight' => 5) );
+  return $it_script;
+}
 
