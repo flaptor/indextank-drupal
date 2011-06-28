@@ -1,6 +1,9 @@
 IndexTank module for Drupal
 http://www.indextank.com
 
+Requirements:
+1.- php5-curl module.
+
 Installation instructions:
 1.- Sign up at IndexTank.
 2.- Download and unzip/untar the last stable version of the IndexTank module for Drupal.
