@@ -1,6 +1,11 @@
 <?php
 // $Id$: indextank.install
 
+/**
+ * @file
+ * Install, update and uninstall functions for the IndexTank module.
+ */
+
 function indextank_uninstall() {
   indextank_do_uninstall();
 }

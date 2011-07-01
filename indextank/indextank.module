@@ -125,7 +125,7 @@ function indextank_admin_submit($form, &$form_state) {
       $index->delete_index();
     }
 
-    $public_search = true;
+    $public_search = TRUE;
     $index->create_index($public_search);
 
     while (! $index->has_started()) {
@@ -144,7 +144,8 @@ function indextank_admin_submit($form, &$form_state) {
       while ($row = db_fetch_object($rows)) {
         $results[] = $row;
       } 
-    } else {
+    } 
+    else {
       $results = db_query(
       "SELECT n.nid, n.type, n.title, n.created as timestamp, fd.body_value as body, u.name name
          FROM node n, field_data_body fd, users u
@@ -195,7 +196,8 @@ function indextank_nodeapi(&$node, $op, $a3 = NULL, $a4 = NULL) {
   if ($op == 'insert' || $op == 'update') {
     $index = get_indextank_index();
     indextank_index_document($index, $node);
-  } elseif ($op == 'delete') {
+  } 
+  elseif ($op == 'delete') {
     $index = get_indextank_index();
     indextank_delete_document($index, $node);
   }
@@ -233,7 +235,8 @@ function indextank_delete_document($index, $document) {
 function indextank_get_fields($document) {
   if (is_array($document->body)) {
     $text = utf8_encode($document->body['und'][0]['value']);
-  } else {
+  }
+  else {
     $text = utf8_encode($document->body);
   }
   $fields = array(
